@@ -7,12 +7,28 @@ TOKEN = os.environ["BOT_TOKEN"]
 CHANNEL_ID = int(os.environ["CHANNEL_ID"])
 
 intents = discord.Intents.default()
-client = discord.Client(intents=intents)
+
+class MyClient(discord.Client):
+    async def setup_hook(self):
+        self.loop.create_task(scanner())
+
+client = MyClient(intents=intents)
 
 def get_depth(symbol="BTCUSDT"):
     url = "https://api.binance.com/api/v3/depth"
-    r = requests.get(url, params={"symbol": symbol, "limit": 1000}).json()
-    return r
+    r = requests.get(url, params={"symbol": symbol, "limit": 1000})
+    
+    try:
+        data = r.json()
+    except:
+        return None
+
+    # Nếu API trả về lỗi → trả về None
+    if "bids" not in data or "asks" not in data:
+        print("⚠️ Binance API error:", data)
+        return None
+
+    return data
 
 def depth_ratio(depth):
     bid = sum(float(x[1]) for x in depth["bids"])
@@ -25,6 +41,12 @@ async def scanner():
 
     while not client.is_closed():
         depth = get_depth("BTCUSDT")
+
+        if depth is None:
+            print("⚠️ Skipping due to API error.")
+            await asyncio.sleep(5)
+            continue
+
         ratio = depth_ratio(depth)
 
         if ratio > 3:
@@ -36,10 +58,4 @@ async def scanner():
 async def on_ready():
     print(f"Bot {client.user} đã chạy!")
 
-class MyClient(discord.Client):
-    async def setup_hook(self):
-        # chạy background task đúng cách
-        self.loop.create_task(scanner())
-
-client = MyClient(intents=intents)
 client.run(TOKEN)
