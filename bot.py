@@ -1,61 +1,69 @@
+import os
 import discord
 import requests
 import asyncio
-import os
 
 TOKEN = os.environ["BOT_TOKEN"]
 CHANNEL_ID = int(os.environ["CHANNEL_ID"])
 
 intents = discord.Intents.default()
+client = discord.Client(intents=intents)
 
-class MyClient(discord.Client):
-    async def setup_hook(self):
-        self.loop.create_task(scanner())
-
-client = MyClient(intents=intents)
 
 def get_depth(symbol="BTCUSDT"):
     url = "https://api.binance.com/api/v3/depth"
-    r = requests.get(url, params={"symbol": symbol, "limit": 1000})
-    
-    try:
-        data = r.json()
-    except:
-        return None
+    params = {"symbol": symbol, "limit": 1000}
+    return requests.get(url, params=params).json()
 
-    # Nếu API trả về lỗi → trả về None
-    if "bids" not in data or "asks" not in data:
-        print("⚠️ Binance API error:", data)
-        return None
-
-    return data
 
 def depth_ratio(depth):
+    if "bids" not in depth or "asks" not in depth:
+        return None
+
     bid = sum(float(x[1]) for x in depth["bids"])
     ask = sum(float(x[1]) for x in depth["asks"])
-    return bid / ask if ask > 0 else 0
+    if ask == 0:
+        return None
+
+    return bid / ask
+
 
 async def scanner():
     await client.wait_until_ready()
     channel = client.get_channel(CHANNEL_ID)
 
-    while not client.is_closed():
+    # Gửi tin nhắn khi bot RUN lần đầu
+    await channel.send("🔥 Bot đã khởi động và đang theo dõi orderbook!")
+
+    # Lặp mãi mãi
+    while True:
         depth = get_depth("BTCUSDT")
-
-        if depth is None:
-            print("⚠️ Skipping due to API error.")
-            await asyncio.sleep(5)
-            continue
-
         ratio = depth_ratio(depth)
 
-        if ratio > 3:
-            await channel.send(f"🔥 MM ĐỠ GIÁ MẠNH! Depth Ratio = {ratio:.2f}")
+        if ratio is not None:
+            msg = f"📊 Ratio BID/ASK hiện tại: **{ratio:.4f}**"
+            await channel.send(msg)
 
-        await asyncio.sleep(5)
+        # ngủ 60s rồi loop tiếp
+        await asyncio.sleep(60)
+
+
+async def status_message():
+    await client.wait_until_ready()
+    channel = client.get_channel(CHANNEL_ID)
+
+    while True:
+        await channel.send("⏰ Bot vẫn đang chạy ổn định (ping 24h).")
+        await asyncio.sleep(86400)  # 24 giờ
+
 
 @client.event
 async def on_ready():
-    print(f"Bot {client.user} đã chạy!")
+    print("Bot đang chạy...")
+
+    # chạy 2 background task song song
+    client.loop.create_task(scanner())
+    client.loop.create_task(status_message())
+
 
 client.run(TOKEN)
