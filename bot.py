@@ -6,11 +6,8 @@ import os
 TOKEN = os.environ["BOT_TOKEN"]
 CHANNEL_ID = int(os.environ["CHANNEL_ID"])
 
-client = discord.Client(intents=discord.Intents.default())
-
-async def send_message(message):
-    channel = client.get_channel(CHANNEL_ID)
-    await channel.send(message)
+intents = discord.Intents.default()
+client = discord.Client(intents=intents)
 
 def get_depth(symbol="BTCUSDT"):
     url = "https://api.binance.com/api/v3/depth"
@@ -24,12 +21,14 @@ def depth_ratio(depth):
 
 async def scanner():
     await client.wait_until_ready()
-    while True:
+    channel = client.get_channel(CHANNEL_ID)
+
+    while not client.is_closed():
         depth = get_depth("BTCUSDT")
         ratio = depth_ratio(depth)
 
         if ratio > 3:
-            await send_message(f"🚀 MM đang gom mạnh! Ratio = {ratio:.2f}")
+            await channel.send(f"🔥 MM ĐỠ GIÁ MẠNH! Depth Ratio = {ratio:.2f}")
 
         await asyncio.sleep(5)
 
@@ -37,5 +36,10 @@ async def scanner():
 async def on_ready():
     print(f"Bot {client.user} đã chạy!")
 
-client.loop.create_task(scanner())
+class MyClient(discord.Client):
+    async def setup_hook(self):
+        # chạy background task đúng cách
+        self.loop.create_task(scanner())
+
+client = MyClient(intents=intents)
 client.run(TOKEN)
